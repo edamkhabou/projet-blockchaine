@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Supply Chain - Projet Académique Blockchain</title>
+    <!-- Une seule petite bibliothèque pour communiquer avec MetaMask -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #1a365d; text-align: center; margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #666; margin-top: 0; margin-bottom: 25px; }
+        
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; color: #2b6cb0; border-bottom: 2px solid #ebf8ff; padding-bottom: 8px; font-size: 1.2rem; }
+        
+        input { padding: 10px; border: 1px solid #ccc; border-radius: 5px; width: 100%; margin-bottom: 10px; font-size: 14px; }
+        button { background: #3182ce; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; width: 100%; transition: background 0.2s; }
+        button:hover { background: #2b6cb0; }
+        button.btn-green { background: #38a169; }
+        button.btn-green:hover { background: #2f855a; }
+        button.btn-orange { background: #dd6b20; }
+        button.btn-orange:hover { background: #c05621; }
+        
+        .row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .col { flex: 1; }
+        
+        /* Affichage des performances */
+        .perf-grid { display: flex; gap: 15px; text-align: center; margin-top: 15px; }
+        .perf-box { flex: 1; background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 10px; }
+        .perf-box strong { display: block; font-size: 18px; color: #2b6cb0; margin-top: 5px; }
+        
+        /* Fiche Produit */
+        .result-box { background: #fafafa; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-top: 10px; display: none; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        .badge-fabrique { background: #bee3f8; color: #2b6cb0; }
+        .badge-transit { background: #feebc8; color: #c05621; }
+        .badge-livre { background: #c6f6d5; color: #22543d; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📦 Gestion de Chaîne d'Approvisionnement</h1>
+    <p class="subtitle">Projet Académique Simple : Suivi, Horodatage & Mesure des Performances</p>
+
+    <!-- 1. CONNEXION ET CONFIGURATION -->
+    <div class="card">
+        <h2>1. Connexion & Contrat</h2>
+        <button id="connectBtn" onclick="connecterMetaMask()">🦊 Connecter MetaMask</button>
+        <p id="walletAddress" style="font-size: 12px; color: #4a5568; margin-top: 8px;"></p>
+        
+        <div style="margin-top: 10px;">
+            <label style="font-size: 12px; font-weight: bold; color: #4a5568;">Adresse du contrat déployé :</label>
+            <div class="row" style="margin-top: 5px;">
+                <input type="text" id="contractAddress" placeholder="Collez l'adresse ici (0x...)" style="margin-bottom: 0;">
+                <button style="width: auto; white-space: nowrap;" onclick="sauvegarderContrat()">Valider</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. ACTIONS DU CYCLE DE VIE (FABRIQUER, EXPEDIER, LIVRER) -->
+    <div class="card">
+        <h2>2. Actions sur les Produits</h2>
+        
+        <!-- FABRICATION -->
+        <div style="margin-bottom: 20px;">
+            <label style="font-weight: bold; font-size: 13px;">A. Fabrication (Créer un produit) :</label>
+            <div class="row" style="margin-top: 5px;">
+                <input type="text" id="nomProduit" placeholder="Ex: Lot de Vaccins #101" style="margin-bottom: 0;">
+                <button style="width: auto; white-space: nowrap;" onclick="actionFabriquer()">Fabriquer</button>
+            </div>
+        </div>
+
+        <!-- EXPEDITION ET LIVRAISON -->
+        <div class="row">
+            <div class="col">
+                <label style="font-weight: bold; font-size: 13px;">B. Expédition :</label>
+                <input type="number" id="idExpedier" placeholder="ID du produit (ex: 1)" style="margin-top: 5px;">
+                <button class="btn-orange" onclick="actionExpedier()">Mettre en Transit</button>
+            </div>
+            <div class="col">
+                <label style="font-weight: bold; font-size: 13px;">C. Livraison :</label>
+                <input type="number" id="idLivrer" placeholder="ID du produit (ex: 1)" style="margin-top: 5px;">
+                <button class="btn-green" onclick="actionLivrer()">Confirmer Livraison</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. TRAÇABILITÉ ET HORODATAGE (CONSULTATION) -->
+    <div class="card">
+        <h2>3. Traçabilité & Horodatage (Consulter un Produit)</h2>
+        <div class="row">
+            <input type="number" id="idConsulter" placeholder="Entrez l'ID du produit (ex: 1)" style="margin-bottom: 0;">
+            <button style="width: auto; white-space: nowrap;" onclick="actionConsulter()">Rechercher</button>
+        </div>
+
+        <div id="resultatProduit" class="result-box">
+            <h3 id="resNom" style="margin-top: 0; color: #1a365d;"></h3>
+            <p><strong>Statut actuel :</strong> <span id="resStatut" class="badge"></span></p>
+            <p><strong>📅 Date de fabrication :</strong> <span id="resDateCrea"></span></p>
+            <p><strong>🔄 Dernière mise à jour :</strong> <span id="resDateMaj"></span></p>
+            <p style="font-size: 12px; color: #666; word-break: break-all;"><strong>👤 Responsable actuel :</strong> <span id="resResponsable"></span></p>
+        </div>
+    </div>
+
+    <!-- 4. MESURE DES PERFORMANCES -->
+    <div class="card">
+        <h2>4. Mesure des Performances de la dernière Transaction</h2>
+        <div class="perf-grid">
+            <div class="perf-box">
+                <span>⏱️ Latence</span>
+                <strong id="perfLatence">0 ms</strong>
+                <small style="color: #666;">Temps de validation</small>
+            </div>
+            <div class="perf-box">
+                <span>⛽ Gas Consommé</span>
+                <strong id="perfGas">0</strong>
+                <small style="color: #666;">Unités EVM</small>
+            </div>
+            <div class="perf-box">
+                <span>🚀 Débit Estimé</span>
+                <strong id="perfDebit">0 tx/s</strong>
+                <small style="color: #666;">Transactions / sec</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ABI SIMPLE CORRESPONDANT STRICTEMENT AUX 4 FONCTIONS DU SMART CONTRACT
+    const ABI = [
+        "function fabriquer(string memory _nom) public",
+        "function expedier(uint _id) public",
+        "function livrer(uint _id) public",
+        "function getProduit(uint _id) public view returns (uint id, string memory nom, string memory statutTexte, uint dateCreation, uint dateDerniereMaj, address responsable)",
+        "function totalProduits() public view returns (uint)"
+    ];
+
+    let provider = null;
+    let signer = null;
+    let contract = null;
+
+    // Charger l'adresse sauvegardee
+    window.onload = function() {
+        const saved = localStorage.getItem("sc_address");
+        if (saved) document.getElementById("contractAddress").value = saved;
+    };
+
+    // Connexion simple a MetaMask
+    async function connecterMetaMask() {
+        if (!window.ethereum) {
+            alert("MetaMask n'est pas détecté. Veuillez ouvrir cette page avec un serveur local (double-cliquez sur start_server.bat).");
+            return;
+        }
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer = provider.getSigner();
+        const address = await signer.getAddress();
+        document.getElementById("walletAddress").innerText = "Connecté avec le compte : " + address;
+        document.getElementById("connectBtn").innerText = "✅ MetaMask Connecté";
+        initialiserContrat();
+    }
+
+    function sauvegarderContrat() {
+        const addr = document.getElementById("contractAddress").value.trim();
+        if (!ethers.utils.isAddress(addr)) {
+            alert("Veuillez saisir une adresse valide (0x...)");
+            return;
+        }
+        localStorage.setItem("sc_address", addr);
+        initialiserContrat();
+        alert("Adresse sauvegardée !");
+    }
+
+    function initialiserContrat() {
+        const addr = document.getElementById("contractAddress").value.trim();
+        if (signer && ethers.utils.isAddress(addr)) {
+            contract = new ethers.Contract(addr, ABI, signer);
+        }
+    }
+
+    // FONCTION COMMUNE POUR MESURER LES PERFORMANCES (LATENCE, GAS, DEBIT)
+    async function executerTransaction(txPromise) {
+        if (!contract) {
+            alert("Veuillez d'abord connecter MetaMask et valider l'adresse du contrat.");
+            return;
+        }
+        try {
+            // Debut du chrono
+            const debut = performance.now();
+            
+            // Envoi de la transaction
+            const tx = await txPromise();
+            
+            // Attente de confirmation du bloc (Mining)
+            const receipt = await tx.wait();
+            
+            // Fin du chrono
+            const fin = performance.now();
+
+            // Calculs des performances (Exigence c de votre professeure)
+            const latenceMs = Math.round(fin - debut);
+            const gas = receipt.gasUsed.toNumber();
+            const debit = (1000 / (latenceMs || 1000)).toFixed(2);
+
+            // Mise a jour de l'affichage
+            document.getElementById("perfLatence").innerText = latenceMs + " ms";
+            document.getElementById("perfGas").innerText = gas.toLocaleString();
+            document.getElementById("perfDebit").innerText = debit + " tx/s";
+
+            alert("Succès !\nLatence : " + latenceMs + " ms\nGas : " + gas);
+        } catch (err) {
+            console.error(err);
+            alert("Erreur : " + (err.reason || err.message));
+        }
+    }
+
+    // ACTION A : FABRIQUER
+    async function actionFabriquer() {
+        const nom = document.getElementById("nomProduit").value;
+        if (!nom) { alert("Indiquez un nom de produit."); return; }
+        await executerTransaction(() => contract.fabriquer(nom));
+        document.getElementById("nomProduit").value = "";
+    }
+
+    // ACTION B : EXPEDIER
+    async function actionExpedier() {
+        const id = document.getElementById("idExpedier").value;
+        if (!id) { alert("Indiquez l'ID du produit."); return; }
+        await executerTransaction(() => contract.expedier(id));
+        document.getElementById("idExpedier").value = "";
+    }
+
+    // ACTION C : LIVRER
+    async function actionLivrer() {
+        const id = document.getElementById("idLivrer").value;
+        if (!id) { alert("Indiquez l'ID du produit."); return; }
+        await executerTransaction(() => contract.livrer(id));
+        document.getElementById("idLivrer").value = "";
+    }
+
+    // ACTION 3 : RECHERCHER & AFFICHER L'HORODATAGE
+    async function actionConsulter() {
+        if (!contract) {
+            alert("Connectez d'abord MetaMask et validez l'adresse du contrat.");
+            return;
+        }
+        const id = document.getElementById("idConsulter").value;
+        if (!id) { alert("Indiquez l'ID."); return; }
+
+        try {
+            const p = await contract.getProduit(id);
+            
+            document.getElementById("resultatProduit").style.display = "block";
+            document.getElementById("resNom").innerText = "Produit #" + p.id + " : " + p.nom;
+            
+            // Statut et couleur
+            const statutSpan = document.getElementById("resStatut");
+            statutSpan.innerText = p.statutTexte;
+            statutSpan.className = "badge";
+            if (p.statutTexte === "Fabrique") statutSpan.classList.add("badge-fabrique");
+            else if (p.statutTexte === "En Transit") statutSpan.classList.add("badge-transit");
+            else if (p.statutTexte === "Livre") statutSpan.classList.add("badge-livre");
+
+            // Conversion du timestamp (secondes) en date francaise lisible
+            const dateCrea = new Date(p.dateCreation.toNumber() * 1000);
+            const dateMaj = new Date(p.dateDerniereMaj.toNumber() * 1000);
+
+            document.getElementById("resDateCrea").innerText = dateCrea.toLocaleString("fr-FR");
+            document.getElementById("resDateMaj").innerText = dateMaj.toLocaleString("fr-FR");
+            document.getElementById("resResponsable").innerText = p.responsable;
+
+        } catch (err) {
+            console.error(err);
+            alert("Produit #" + id + " introuvable. Vérifiez que l'ID existe sur la blockchain.");
+        }
+    }
+</script>
+
+</body>
+</html>
