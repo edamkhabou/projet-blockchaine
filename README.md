@@ -33,8 +33,6 @@ Projet académique simple, efficace et sans dépendances lourdes pour la gestion
 │   └── SupplyChain.sol           # Smart Contract Solidity (~60 lignes, ultra-lisible)
 ├── frontend/
 │   └── index.html                # Interface Web complète (HTML + CSS + Ethers.js)
-├── scripts/
-│   └── measure_performance.js    # Script de calcul et de simulation des métriques
 ├── start_server.bat              # Script de lancement rapide en local sous Windows
 ├── package.json                  # Métadonnées du projet
 └── README.md                     # Documentation
