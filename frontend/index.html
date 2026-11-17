@@ -163,7 +163,7 @@
         initialiserContrat();
     }
 
-    function sauvegarderContrat() {
+    async function sauvegarderContrat() {
         const addr = document.getElementById("contractAddress").value.trim();
         if (!ethers.utils.isAddress(addr)) {
             alert("Veuillez saisir une adresse valide (0x...)");
@@ -171,7 +171,17 @@
         }
         localStorage.setItem("sc_address", addr);
         initialiserContrat();
-        alert("Adresse sauvegardée !");
+        
+        // Tester immédiatement la communication avec le contrat
+        if (contract) {
+            try {
+                const total = await contract.totalProduits();
+                alert(`✅ Contrat connecté avec succès !\n• Adresse : ${addr}\n• Nombre de produits créés : ${total.toString()}`);
+            } catch(e) {
+                console.warn(e);
+                alert(`⚠️ Adresse enregistrée (${addr}), mais le contrat ne répond pas.\n\nAssurez-vous d'avoir bien redéployé le nouveau contrat SupplyChain.sol sur Remix, et d'être sur le même réseau dans MetaMask.`);
+            }
+        }
     }
 
     function initialiserContrat() {
@@ -210,10 +220,12 @@
             document.getElementById("perfGas").innerText = gas.toLocaleString();
             document.getElementById("perfDebit").innerText = debit + " tx/s";
 
-            alert("Succès !\nLatence : " + latenceMs + " ms\nGas : " + gas);
+            alert("Opération réussie !\n• Latence : " + latenceMs + " ms\n• Gas : " + gas + " unités");
+            return receipt;
         } catch (err) {
             console.error(err);
-            alert("Erreur : " + (err.reason || err.message));
+            alert("Erreur lors de la transaction : " + (err.reason || err.data?.message || err.message));
+            throw err;
         }
     }
 
@@ -221,24 +233,46 @@
     async function actionFabriquer() {
         const nom = document.getElementById("nomProduit").value;
         if (!nom) { alert("Indiquez un nom de produit."); return; }
-        await executerTransaction(() => contract.fabriquer(nom));
-        document.getElementById("nomProduit").value = "";
+        
+        try {
+            await executerTransaction(() => contract.fabriquer(nom));
+            document.getElementById("nomProduit").value = "";
+            
+            // Affichage automatique du produit créé dans la section consultation
+            const total = await contract.totalProduits();
+            document.getElementById("idConsulter").value = total.toString();
+            await actionConsulter();
+        } catch(e) {
+            console.warn("Échec fabrication:", e);
+        }
     }
 
     // ACTION B : EXPEDIER
     async function actionExpedier() {
         const id = document.getElementById("idExpedier").value;
         if (!id) { alert("Indiquez l'ID du produit."); return; }
-        await executerTransaction(() => contract.expedier(id));
-        document.getElementById("idExpedier").value = "";
+        try {
+            await executerTransaction(() => contract.expedier(id));
+            document.getElementById("idExpedier").value = "";
+            document.getElementById("idConsulter").value = id;
+            await actionConsulter();
+        } catch(e) {
+            console.warn("Échec expédition:", e);
+        }
     }
 
     // ACTION C : LIVRER
     async function actionLivrer() {
         const id = document.getElementById("idLivrer").value;
         if (!id) { alert("Indiquez l'ID du produit."); return; }
-        await executerTransaction(() => contract.livrer(id));
-        document.getElementById("idLivrer").value = "";
+        try {
+            await executerTransaction(() => contract.livrer(id));
+            document.getElementById("idLivrer").value = "";
+            document.getElementById("idConsulter").value = id;
+            await actionConsulter();
+        } catch(e) {
+            console.warn("Échec livraison:", e);
+        }
     }
 
     // ACTION 3 : RECHERCHER & AFFICHER L'HORODATAGE
@@ -248,33 +282,60 @@
             return;
         }
         const id = document.getElementById("idConsulter").value;
-        if (!id) { alert("Indiquez l'ID."); return; }
+        if (!id) { alert("Indiquez l'ID du produit."); return; }
 
         try {
-            const p = await contract.getProduit(id);
+            // Vérifier d'abord le nombre total de produits
+            const totalBN = await contract.totalProduits();
+            const total = totalBN.toNumber ? totalBN.toNumber() : Number(totalBN);
             
-            document.getElementById("resultatProduit").style.display = "block";
-            document.getElementById("resNom").innerText = "Produit #" + p.id + " : " + p.nom;
-            
-            // Statut et couleur
-            const statutSpan = document.getElementById("resStatut");
-            statutSpan.innerText = p.statutTexte;
-            statutSpan.className = "badge";
-            if (p.statutTexte === "Fabrique") statutSpan.classList.add("badge-fabrique");
-            else if (p.statutTexte === "En Transit") statutSpan.classList.add("badge-transit");
-            else if (p.statutTexte === "Livre") statutSpan.classList.add("badge-livre");
+            if (total === 0) {
+                alert("Aucun produit n'existe encore dans ce contrat (Total = 0).\n\nFabriquez d'abord un produit dans la section 2 (A. Fabrication) et confirmez dans MetaMask !");
+                return;
+            }
 
-            // Conversion du timestamp (secondes) en date francaise lisible
-            const dateCrea = new Date(p.dateCreation.toNumber() * 1000);
-            const dateMaj = new Date(p.dateDerniereMaj.toNumber() * 1000);
+            const numId = Number(id);
+            if (numId <= 0 || numId > total) {
+                alert(`Le produit #${id} n'existe pas.\n\nCe contrat contient actuellement ${total} produit(s) (IDs valides : 1 à ${total}).`);
+                return;
+            }
+
+            const p = await contract.getProduit(numId);
+            
+            // Extraction des champs de façon compatible
+            const pId = p.id ? p.id.toString() : p[0].toString();
+            const pNom = p.nom || p[1];
+            const pStatut = p.statutTexte || p[2];
+            const pDateCrea = p.dateCreation || p[3];
+            const pDateMaj = p.dateDerniereMaj || p[4];
+            const pResponsable = p.responsable || p[5];
+
+            document.getElementById("resultatProduit").style.display = "block";
+            document.getElementById("resNom").innerText = "Produit #" + pId + " : " + pNom;
+            
+            // Statut et couleur du badge
+            const statutSpan = document.getElementById("resStatut");
+            statutSpan.innerText = pStatut;
+            statutSpan.className = "badge";
+            if (pStatut === "Fabrique") statutSpan.classList.add("badge-fabrique");
+            else if (pStatut === "En Transit") statutSpan.classList.add("badge-transit");
+            else if (pStatut === "Livre") statutSpan.classList.add("badge-livre");
+
+            // Conversion du timestamp (secondes) en date française lisible
+            const creaSec = pDateCrea.toNumber ? pDateCrea.toNumber() : Number(pDateCrea);
+            const majSec = pDateMaj.toNumber ? pDateMaj.toNumber() : Number(pDateMaj);
+
+            const dateCrea = new Date(creaSec * 1000);
+            const dateMaj = new Date(majSec * 1000);
 
             document.getElementById("resDateCrea").innerText = dateCrea.toLocaleString("fr-FR");
             document.getElementById("resDateMaj").innerText = dateMaj.toLocaleString("fr-FR");
-            document.getElementById("resResponsable").innerText = p.responsable;
+            document.getElementById("resResponsable").innerText = pResponsable;
 
         } catch (err) {
-            console.error(err);
-            alert("Produit #" + id + " introuvable. Vérifiez que l'ID existe sur la blockchain.");
+            console.error("Erreur détaillée consultation:", err);
+            const msg = err.reason || err.data?.message || err.message || "Erreur de lecture";
+            alert("Erreur lors de la recherche du produit #" + id + " :\n\n" + msg + "\n\nVérifiez que le contrat à cette adresse contient bien la fonction getProduit.");
         }
     }
 </script>
